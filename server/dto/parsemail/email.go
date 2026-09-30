@@ -479,7 +479,11 @@ func (e *Email) ForwardBuildBytes(ctx *context.Context, sender *models.User, for
 	h.Set("X-Forwarded-By", senderEmailAddress)
 	h.Set("X-Forwarded-To", forwardUser.EmailAddress)
 	h.SetText("Subject", e.Subject)
-	h.SetMessageID(GenerateMsgID(config.Get().PrimaryDomain()))
+	fwdDomain := config.Get().PrimaryDomain()
+	if parts := strings.Split(senderEmailAddress, "@"); len(parts) >= 2 && parts[1] != "" {
+		fwdDomain = parts[1]
+	}
+	h.SetMessageID(GenerateMsgID(fwdDomain))
 	if e.MsgID != "" {
 		h.Set("References", fmt.Sprintf("<%s>", e.MsgID))
 		h.Set("In-Reply-To", fmt.Sprintf("<%s>", e.MsgID))
@@ -631,7 +635,13 @@ func (e *Email) BuildBytes(ctx *context.Context, dkim bool) []byte {
 	if e.MsgID != "" {
 		h.SetMessageID(e.MsgID)
 	} else {
-		h.SetMessageID(fmt.Sprintf("%d@%s", e.MessageId, config.Get().PrimaryDomain()))
+		msgDomain := config.Get().PrimaryDomain()
+		if e.From != nil {
+			if _, d := e.From.GetDomainAccount(); d != "" {
+				msgDomain = d
+			}
+		}
+		h.SetMessageID(fmt.Sprintf("%d@%s", e.MessageId, msgDomain))
 	}
 	h.SetAddressList("From", from)
 	h.SetAddressList("Sender", from)

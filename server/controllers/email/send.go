@@ -193,7 +193,13 @@ func Send(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 		CronSendTime: time.Now(),
 		Status:       1,
 		CreateTime:   time.Now(),
-		MsgID:        parsemail.GenerateMsgID(config.Get().PrimaryDomain()),
+		MsgID: func() string {
+			fromDomain := account.DomainPart(e.From.EmailAddress)
+			if fromDomain == "" {
+				fromDomain = config.Get().PrimaryDomain()
+			}
+			return parsemail.GenerateMsgID(fromDomain)
+		}(),
 	}
 
 	_, err = db.Instance.Insert(&modelEmail)
