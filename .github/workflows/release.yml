@@ -1,78 +1,144 @@
-name: Build and Release
+name: Automated Build & Release
 
 on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
   workflow_dispatch:
-  release:
-    types: [ released,prereleased ]
 
+permissions:
+  contents: write
 
 jobs:
   build:
-    permissions:
-      contents: write
+    name: Build & Package Binaries
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [ windows,  linux, darwin ]
-        goarch: [ amd64, arm64 ]
-    runs-on: ubuntu-latest
-    env:
-      CGO_ENABLED: 0
-      GOOS: ${{ matrix.goos }}
-      GOARCH: ${{ matrix.goarch }}
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ""
+            archive: tar.gz
+          - goos: linux
+            goarch: arm64
+            ext: ""
+            archive: tar.gz
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+            archive: zip
+          - goos: darwin
+            goarch: amd64
+            ext: ""
+            archive: tar.gz
+          - goos: darwin
+            goarch: arm64
+            ext: ""
+            archive: tar.gz
+
     steps:
-      - name: Get version
-        id: get_version
-        run: |
-          echo "VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-          echo "${GITHUB_REF}"
-      - name: Checkout
-        uses: actions/checkout@v4.0.0
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v3.8.1
-      - name: Install Dependencies
-        run: npm install --global yarn
-      - name: Setup Go environment
-        uses: actions/setup-go@v4.1.0
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun (Frontend)
+        uses: oven-sh/setup-bun@v2
         with:
+          bun-version: latest
+
+      - name: Build Svelte 5 Webmail
+        run: |
+          cd fe-svelte
+          bun install --frozen-lockfile || bun install
+          bun run build
+          cd ..
+          rm -rf server/listen/http_server/dist
+          cp -r fe-svelte/dist server/listen/http_server/dist
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
           check-latest: true
-      - name: Gen output name
+
+      - name: Compile Lightmail Binary
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          echo "FILENAME=pmail_${{ matrix.goos }}_${{ matrix.goarch }}" >> ${GITHUB_ENV}
-          echo "WCFILENAME=wechat_push_${{ matrix.goos }}_${{ matrix.goarch }}" >> ${GITHUB_ENV}
-          echo "SPAMBLOCKFILENAME=spam_block_${{ matrix.goos }}_${{ matrix.goarch }}" >> ${GITHUB_ENV}
-          echo "ZIPNAME=${{ matrix.goos }}_${{ matrix.goarch }}" >> ${GITHUB_ENV}
-      - name: Rename Windows File
-        if: matrix.goos == 'windows'
+          BIN_NAME="lightmail_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
+          cd server
+          go build -ldflags="-s -w -X 'main.gitHash=${{ github.sha }}' -X 'main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" -o "../dist_bin/${BIN_NAME}" main.go
+          cd ..
+
+      - name: Package Archives
         run: |
-          echo "FILENAME=pmail_${{ matrix.goos }}_${{ matrix.goarch }}.exe" >> ${GITHUB_ENV}
-          echo "WCFILENAME=wechat_push_${{ matrix.goos }}_${{ matrix.goarch }}.exe" >> ${GITHUB_ENV}
-          echo "SPAMBLOCKFILENAME=spam_block_${{ matrix.goos }}_${{ matrix.goarch }}.exe" >> ${GITHUB_ENV}
-      - name: FE Build
-        run: cd fe && yarn && yarn build
-      - name: BE Build
-        run: |
-          cd server && cp -rf ../fe/dist listen/http_server
-          go build -ldflags "-s -w -X 'main.version=${{ env.VERSION }}' -X 'main.goVersion=$(go version)' -X 'main.gitHash=$(git show -s --format=%H)' -X 'main.buildTime=$(TZ=UTC-8 date +%Y-%m-%d" "%H:%M:%S)'" -o ${{ env.FILENAME }}  main.go
-          go build -ldflags "-s -w" -o ${{ env.WCFILENAME }} hooks/wechat_push/wechat_push.go
-          go build -ldflags "-s -w" -o ${{ env.SPAMBLOCKFILENAME }} hooks/spam_block/spam_block.go
-          ls -alh
-      - name: Zip
-        run: |
-          cd ./server
-          mkdir plugins
-          mv ${{ env.WCFILENAME }} plugins/
-          mv ${{ env.SPAMBLOCKFILENAME }} plugins/
-          zip -r ${{ env.ZIPNAME }}.zip ${{ env.FILENAME }} plugins
-          ls
-      - name: Upload files to Artifacts
+          mkdir -p release_assets
+          BIN_NAME="lightmail_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
+          TARGET_BIN="lightmail${{ matrix.ext }}"
+          
+          # Stage binary as clean generic executable name
+          mkdir -p pkg_tmp
+          cp "dist_bin/${BIN_NAME}" "pkg_tmp/${TARGET_BIN}"
+          cp LICENSE pkg_tmp/ || true
+          cp README.md pkg_tmp/ || true
+          
+          cd pkg_tmp
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            zip -r "../release_assets/lightmail-${{ matrix.goos }}-${{ matrix.goarch }}.zip" .
+          else
+            tar -czvf "../release_assets/lightmail-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" .
+          fi
+          cd ..
+          rm -rf pkg_tmp
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ZIPNAME }}
-          path: server/${{ env.ZIPNAME }}.zip
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
+          name: lightmail-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: release_assets/*
+
+  release:
+    name: Publish Continuous Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download All Built Artifacts
+        uses: actions/download-artifact@v4
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: server/${{ env.ZIPNAME }}.zip
-          tag: ${{ github.ref }}
-          file_glob: true
+          path: all_assets
+
+      - name: Flatten Release Assets & Generate Checksums
+        run: |
+          mkdir -p final_assets
+          find all_assets -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} final_assets/ \;
+          cd final_assets
+          sha256sum * > checksums.txt
+          ls -lh
+          cd ..
+
+      - name: Publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="continuous"
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+          
+          # Delete existing continuous tag if present to ensure rolling release
+          if [ "$TAG_NAME" = "continuous" ]; then
+            git push --delete origin continuous || true
+            gh release delete continuous --yes || true
+          fi
+          
+          gh release create "$TAG_NAME" \
+            --title "Lightmail Rolling Release (${TAG_NAME})" \
+            --notes "Automated release built from commit [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}). Ultra-light single binary email server (~8MB compressed)." \
+            final_assets/*

@@ -1,80 +1,96 @@
 # Lightmail ⚡
 
 > **The World's Lightest, Most Streamlined Production Email Server & Webmail.**  
-> Single binary • Pure SQLite • Modern Svelte Webmail • Multi-Domain • 1-Click Cloudflare DNS • IPv6-Native
+> Single Binary • ~8MB Compressed (~16MB Static) • ~4.8MB RAM • Pure SQLite • Svelte 5 Webmail • Multi-Domain DKIM • 1-Click Cloudflare DNS • IPv6-Native • Zero External Daemons
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://go.dev/)
 [![Frontend](https://img.shields.io/badge/Frontend-Svelte%205%20%2B%20Vite-FF3E00?logo=svelte)](https://svelte.dev/)
-[![Memory Footprint](https://img.shields.io/badge/RAM-~5MB-success)](https://github.com/ashu-choudhury/PMail)
+[![RAM Footprint](https://img.shields.io/badge/Memory-~4.8MB%20RAM-success)](https://github.com/ashu-choudhury/lightmail)
+[![Binary Size](https://img.shields.io/badge/Binary-~8MB%20(compressed)-informational)](https://github.com/ashu-choudhury/lightmail/releases)
+[![Build Status](https://github.com/ashu-choudhury/lightmail/actions/workflows/release.yml/badge.svg)](https://github.com/ashu-choudhury/lightmail/actions/workflows/release.yml)
 
 ---
 
-## 🌟 Acknowledgements & Roots
+## 🌟 Roots & Honest Attribution
 
-**Lightmail** is an advanced, ultra-streamlined fork of [**Jinnrry/PMail**](https://github.com/Jinnrry/PMail). We express our deepest gratitude and credit to [@Jinnrry](https://github.com/Jinnrry) and all original contributors for laying down the foundation of a minimalistic email server in Go.
+**Lightmail** began as an extensive, independent refactor and evolution of [**Jinnrry/PMail**](https://github.com/Jinnrry/PMail). We give our heartfelt thanks and 100% credit to [@Jinnrry](https://github.com/Jinnrry) and the original contributors for building the initial Go mail foundation.
 
-This repository represents an extensive evolution of that vision: completely trimmed of bloat, re-engineered for **pure SQLite**, equipped with a modern **Svelte 5** webmail interface, full **multi-domain DKIM management**, **1-Click Cloudflare DNS synchronization**, resilient **IPv6/DNS64 networking**, and an automated **zero-downtime Python VPS lifecycle deployer**.
+### What Was Re-Engineered & Stripped Down?
+While PMail was already lighter than traditional setups, it still contained unnecessary bulk. In **Lightmail**, we stripped down the codebase as much as technically possible to create the world's most streamlined mail server:
+- **Stripped Heavy Dependencies**: Removed legacy Chinese push notifications (WeChat Push), deprecated debug hooks, and redundant daemons.
+- **Rewrote Frontend with Svelte 5**: Replaced the entire heavy Vue 3 + Element Plus frontend stack with an ultra-responsive, zero-dependency **Svelte 5** webmail interface (< 150KB gzip).
+- **100% Pure SQLite**: Eliminated external database servers (MySQL/PostgreSQL/Redis). All accounts, emails, settings, and routing rules live in a single SQLite database (`/opt/pmail/config/pmail.db`) with automatic schema migrations.
+- **1-Click Cloudflare DNS Automation**: Complete RFC & Cloudflare API v4 integration supporting both API Tokens and Global API Keys with permanent SQLite credential persistence.
+- **Live Direct DNS Health Verification**: Integrated custom recursive DNS resolvers querying Cloudflare (`1.1.1.1`) and Google (`8.8.8.8`) directly, eliminating 30-minute negative DNS caching delays.
+- **IPv6-Native & NAT64/DNS64 Compatibility**: Tested and verified on strictly IPv6-only VPS environments (e.g. Proxmox LXC containers) with dynamic IPv6 SPF generation and fallback DNS resolvers.
+- **Continuous Automated Releases**: Pre-compiled multi-platform binaries are built and published automatically on every push via GitHub Actions.
 
 ---
 
-## 💡 Why Lightmail?
+## ⚡ 1-Command Linux Quick Install
 
-Most self-hosted email servers (Mailcow, Mail-in-a-Box, iRedMail, Docker-mailserver) require complex multi-container stacks running Postfix, Dovecot, SpamAssassin, ClamAV, Redis, MySQL, and Nginx—consuming **2GB to 4GB of RAM** just to idle.
+You don't need to compile anything or install complex dependencies. Run this single command on any clean Linux VPS (Ubuntu, Debian, CentOS, AlmaLinux, Alpine, Arch):
 
-**Lightmail replaces that entire stack with a single ~16MB binary that runs smoothly in just 5MB of RAM.**
-
+```bash
+curl -fsSL https://raw.githubusercontent.com/ashu-choudhury/lightmail/master/install.sh | sudo bash
 ```
-Traditional Mail Stacks (~2.5GB RAM)         Lightmail (~5MB RAM)
-┌─────────────────────────────────┐         ┌──────────────────────────────┐
-│  Postfix + Dovecot + Rspamd     │         │                              │
-│  Redis + MySQL/PostgreSQL       │  ====>  │  Single Native Go Binary     │
-│  Nginx + PHP-FPM + Roundcube    │         │  Embedded Svelte SPA         │
-│  ClamAV + Unbound + Cron        │         │  Pure SQLite Database        │
-└─────────────────────────────────┘         └──────────────────────────────┘
-```
+
+### What This Command Does Automatically:
+1. Detects your CPU architecture (`x86_64` or `arm64`).
+2. Installs required system packages (`curl`, `tar`, `gzip`, `libcap`).
+3. Downloads the latest pre-compiled Lightmail binary (~8MB compressed).
+4. Installs the binary into `/opt/pmail/pmail`.
+5. Grants low-port network binding capabilities (`cap_net_bind_service=+ep`).
+6. Creates and starts the `systemd` service (`pmail.service`).
+7. Prints your server's web setup URL: `http://<YOUR-SERVER-IP>:8080`.
 
 ---
 
-## ✨ Features at a Glance
+## 🛡️ Recommended Reverse Proxy: Caddy
 
-### 🚀 Ultra-Light & Self-Contained
-- **Single Static Binary**: Built with Go; embeds all frontend assets into the binary.
-- **Pure SQLite Architecture**: No database server to install or maintain. All emails, users, rules, and settings are stored in a single, robust `/opt/pmail/config/pmail.db` SQLite database with automatic schema migrations.
-- **Minimal RAM Footprint**: Idles at **~4.8MB RAM**, making it perfect for budget VPS instances ($1/month or free-tier instances).
+To access your Webmail interface with clean, automated HTTPS (`https://mail.yourdomain.com`), **we strongly recommend [Caddy](https://caddyserver.com)**.
 
-### 🌐 Multi-Domain & Complete DNS Automation
-- **Unlimited Mail Domains**: Host multiple apex domains (e.g., `yourdomain.com`) and subdomains (e.g., `mail.yourdomain.com`) simultaneously on one server.
-- **Automatic 2048-bit RSA DKIM**: Generates isolated cryptographic DKIM keypairs per domain upon creation.
-- **1-Click Cloudflare DNS Sync**:
-  - Automatically provisions **MX**, **SPF**, **DKIM** (`default._domainkey`), **DMARC**, and **AAAA/CNAME** records directly to Cloudflare via official API v4.
-  - Supports modern **Cloudflare API Tokens** (`Authorization: Bearer`) and legacy **Global API Keys** (`X-Auth-Key` / `X-Auth-Email`).
-  - **Permanent SQLite Credential Persistence**: Enter credentials once; they are safely stored in the database indefinitely.
-- **Live DNS Health Verification**:
-  - Real-time DNS status engine with direct queries to global public resolvers (`1.1.1.1` and `8.8.8.8`).
-  - Instant live badges for **Host IP**, **MX Routing**, **SPF**, **DKIM**, and **DMARC**. Zero negative-caching lag.
+### Why Caddy?
+- **Zero-Touch Automatic SSL**: Automatically provisions and renews Let's Encrypt / ZeroSSL certificates without needing certbot or cron jobs.
+- **Dedicated Port Separation**: Caddy handles web traffic (ports 80 & 443), while Lightmail handles email protocols (SMTP 25, 465, 587; IMAP 993; POP3 110, 995).
+- **HTTP/2 & HTTP/3 Out-of-the-Box**: Blazing fast webmail loading speeds.
 
-### 🔒 Modern Email Protocol Support
-- **Inbound & Outbound SMTP**: Full support on Ports **25**, **465** (Implicit TLS), and **587** (STARTTLS).
-- **IMAP4rev1**: Port **993** (SSL/TLS) for syncing with mobile and desktop mail clients.
-- **POP3**: Ports **110** (Plain/STARTTLS) and **995** (SSL/TLS).
-- **10/10 Mail-Tester Deliverability**: Dynamic IPv6/IPv4 SPF alignment and RFC-compliant DKIM signatures ensure emails land straight in Gmail/Outlook inboxes without spam penalties.
-
-### 🌍 IPv6-Native & NAT64/DNS64 Ready
-- Strictly tested on IPv6-only environments (e.g. Proxmox LXC containers).
-- Automatically detects global IPv6 addresses and dynamically injects `ip6:<address>` into SPF records.
-- Built-in fallback DNS resolvers prevent failures during outbound MX resolution on IPv6-only networks.
-
-### 🎨 Clean Svelte 5 Webmail Interface
-- Blazing-fast responsive user interface built with Svelte 5 and Vite (< 150KB gzip).
-- Clean Inbox, Sent, Drafts, Trash, and Spam management.
-- Rich HTML email editor with attachment support.
-- User Management: Create accounts, reset passwords, and assign storage quotas.
-- Domain Management: Live health checks, 1-click Cloudflare provisioning, and copyable DNS records.
+### How to Configure Caddy (Takes 30 Seconds):
+1. Install Caddy:
+   ```bash
+   sudo apt install -y caddy   # Debian/Ubuntu
+   # or dnf install -y caddy  # RHEL/AlmaLinux
+   ```
+2. Open `/etc/caddy/Caddyfile` and add:
+   ```caddyfile
+   mail.yourdomain.com {
+       reverse_proxy 127.0.0.1:8080
+   }
+   ```
+3. Restart Caddy:
+   ```bash
+   sudo systemctl restart caddy
+   ```
+Your webmail is now live at `https://mail.yourdomain.com` with valid SSL!
 
 ---
 
-## 🏗️ Architecture & How It Works
+## 📊 Footprint: Lightmail vs Traditional Stacks
+
+| Metric | Traditional Stacks (Mailcow, iRedMail, etc.) | Lightmail ⚡ |
+| :--- | :--- | :--- |
+| **Idle Memory (RAM)** | 2,000 MB – 4,000 MB | **~4.8 MB** |
+| **Storage / Binary Size** | Multiple GBs of Docker images | **~8 MB** (compressed) / ~16MB (static) |
+| **Components** | Postfix, Dovecot, SpamAssassin, Redis, MySQL, Nginx, PHP | **Single Go Binary** |
+| **Database** | MySQL / MariaDB / PostgreSQL Server | **Pure SQLite (`pmail.db`)** |
+| **DNS Configuration** | Manual copy-pasting of DNS strings | **1-Click Cloudflare DNS Sync** |
+| **IPv6 Support** | Often broken or requires complex dual-stack NAT | **IPv6-Native with Dynamic SPF** |
+| **Setup Time** | 30 – 60 minutes | **1 minute** |
+
+---
+
+## ✨ Full Feature Overview
 
 ```
                                   INTERNET
@@ -111,130 +127,94 @@ Traditional Mail Stacks (~2.5GB RAM)         Lightmail (~5MB RAM)
    └─────────────────────────────────────────────────────────────────┘
 ```
 
----
+### 1. Multi-Domain & 1-Click Cloudflare Provisioning
+- Add unlimited primary and secondary domains.
+- Automatically generates isolated 2048-bit RSA DKIM keypairs per domain.
+- Synchronizes **MX**, **SPF** (`v=spf1 ip6:<ip> a mx ~all`), **DKIM** (`default._domainkey`), **DMARC**, and **AAAA/CNAME** records in one click via Cloudflare API v4.
+- Automatically saves API credentials to SQLite so you never have to re-enter them.
 
-## 🚀 Quick Start & Deployment
+### 2. Live Real-Time DNS Health Checker
+- Bypasses local recursive resolver negative caching.
+- Queries Cloudflare and Google public authoritative DNS over IPv6 and IPv4.
+- Displays immediate status: **Host IP Resolves**, **MX Routing Active**, **SPF Configured**, **DKIM Published**, and **DMARC Active**.
 
-### Method 1: Automated Python VPS Deployer (Recommended)
-
-Lightmail includes an automated lifecycle manager [`deployer.py`](deployer.py) that builds the frontend, compiles the Linux binary, uploads with gzip compression, configures permissions, creates systemd units, and verifies health.
-
-```bash
-# Clone the repository
-git clone https://github.com/ashu-choudhury/PMail.git
-cd PMail
-
-# Install & launch on a fresh Linux server
-python deployer.py --host mail.yourdomain.com --user root --password "your_password" --action install
-
-# Zero-downtime binary update
-python deployer.py --host mail.yourdomain.com --user root --password "your_password" --action update
-
-# Check service health, ports, and resource usage
-python deployer.py --host mail.yourdomain.com --user root --password "your_password" --action status
-```
-
-### Method 2: Manual Single-Binary Run
-
-1. **Build Frontend & Binary**:
-   ```bash
-   cd fe-svelte && bun run build && cd ..
-   cp -r fe-svelte/dist/* server/listen/http_server/dist/
-   cd server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o pmail main.go
-   ```
-
-2. **Run Initial Setup**:
-   ```bash
-   ./pmail -p 8080
-   ```
-   Open `http://your-server-ip:8080` in your web browser and follow the on-screen setup wizard to configure your admin credentials and primary domain.
+### 3. Full Protocol Mail Stack
+- **SMTP**: Ports 25, 465 (Implicit TLS), and 587 (STARTTLS).
+- **IMAP4rev1**: Port 993 (SSL/TLS).
+- **POP3**: Ports 110 and 995 (SSL/TLS).
+- **10/10 Deliverability**: Meets all Gmail, Yahoo, and Outlook deliverability requirements out-of-the-box.
 
 ---
 
-## ⚙️ Configuration Reference
+## 📱 Email Client Configuration
 
-Lightmail stores its persistent configuration in `/opt/pmail/config/config.json`:
+Lightmail works seamlessly with all desktop and mobile mail clients (Thunderbird, Apple Mail, Outlook, iOS Mail, K-9 Mail, Fairemail):
 
-```jsonc
-{
-  "logLevel": "info",
-  "domain": "yourdomain.com",                     // Primary mail domain
-  "domains": [                                   // Configured multi-domains
-    {
-      "name": "yourdomain.com",
-      "dkimSelector": "default",
-      "dkimPrivateKeyPath": "config/dkim/dkim.priv"
-    },
-    {
-      "name": "seconddomain.org",
-      "dkimSelector": "default",
-      "dkimPrivateKeyPath": "config/dkim/seconddomain.org.priv"
-    }
-  ],
-  "webDomain": "mail.yourdomain.com",            // Webmail interface domain
-  "dkimPrivateKeyPath": "config/dkim/dkim.priv",
-  "sslType": "0",                                // 0: Auto Let's Encrypt, 1: Manual
-  "SSLPrivateKeyPath": "config/ssl/private.key",
-  "SSLPublicKeyPath": "config/ssl/public.crt",
-  "dbDSN": "./config/pmail.db",                  // SQLite database path
-  "dbType": "sqlite",                            // Pure SQLite engine
-  "httpsEnabled": 2,                             // 0: HTTPS, 1: Redirect, 2: Reverse Proxy mode
-  "httpPort": 8080,                              // Internal HTTP port
-  "httpsPort": 443,                              // HTTPS port
-  "spamFilterLevel": 0,                          // 0: Off, 1: SPF+DKIM fail, 2: SPF fail, 3: DKIM fail
-  "isInit": true
-}
-```
-
----
-
-## 📱 Mail Client Configuration
-
-Lightmail works out-of-the-box with any standard email client (Thunderbird, Apple Mail, Outlook, iOS, Android, K-9 Mail):
-
-| Protocol | Server Address | Port | Security / Encryption |
+| Protocol | Server Hostname | Port | Encryption |
 | :--- | :--- | :--- | :--- |
-| **IMAP (Incoming)** | `imap.yourdomain.com` (or `smtp.yourdomain.com`) | **993** | SSL / TLS |
-| **POP3 (Incoming)** | `pop.yourdomain.com` (or `smtp.yourdomain.com`) | **995** | SSL / TLS |
+| **IMAP (Incoming)** | `smtp.yourdomain.com` (or `imap.yourdomain.com`) | **993** | SSL / TLS |
+| **POP3 (Incoming)** | `smtp.yourdomain.com` (or `pop.yourdomain.com`) | **995** | SSL / TLS |
 | **SMTP (Outgoing)** | `smtp.yourdomain.com` | **465** | SSL / TLS |
 | **SMTP (Submission)** | `smtp.yourdomain.com` | **587** | STARTTLS |
 
-- **Username**: Your full email address (e.g. `ashu@yourdomain.com`)
-- **Password**: Your Lightmail mailbox password
+- **Username**: Your full email address (e.g. `user@yourdomain.com`)
+- **Password**: Your mailbox password
 
 ---
 
-## 🛠️ Developer Guide
+## 🛠️ How to Build from Source (Optional)
 
-### Development Prerequisites
-- **Go**: 1.22 or newer
-- **Node.js / Bun**: For compiling the Svelte webmail interface
+If you prefer building the project yourself rather than downloading the pre-compiled GitHub releases:
 
-### Project Structure
-```
-PMail/
-├── fe-svelte/              # Modern Svelte 5 + Vite Webmail frontend
-│   ├── src/components/     # Webmail & Admin UI components
-│   └── src/lib/            # REST API client & reactive stores
-├── server/                 # Go backend core
-│   ├── controllers/        # HTTP API routes (domains, users, settings)
-│   ├── db/                 # Pure SQLite storage layer (xorm)
-│   ├── listen/             # Protocol servers (SMTP, IMAP, POP3, HTTP)
-│   ├── models/             # SQLite database models (User, Email, Setting)
-│   └── services/domain/    # Multi-domain DKIM & Cloudflare API v4 integration
-├── deployer.py             # Lifecycle VPS deployment automation script
-└── README.md
-```
+### 1. Prerequisites
+- **Go**: 1.22+ installed
+- **Bun** (or Node.js / npm): For compiling the Svelte webmail
 
-### Running Tests
+### 2. Build Steps
 ```bash
+# Clone the repository
+git clone https://github.com/ashu-choudhury/lightmail.git
+cd lightmail
+
+# Step 1: Build the modern Svelte frontend
+cd fe-svelte
+bun install
+bun run build
+cd ..
+
+# Step 2: Copy built assets to embedded server location
+cp -r fe-svelte/dist/* server/listen/http_server/dist/
+
+# Step 3: Compile the stripped static binary (~16MB static, ~8MB compressed)
 cd server
-go test ./...
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../lightmail_linux_amd64 main.go
+cd ..
+
+# Step 4: Run initial setup
+./lightmail_linux_amd64 -p 8080
 ```
 
 ---
 
-## 📄 License
+## 🚀 Lifecycle Management via `deployer.py`
+
+Lightmail includes a standalone Python deployment script [`deployer.py`](deployer.py) for remote VPS management:
+
+```bash
+# Deploy / Update on remote VPS with zero downtime
+python deployer.py --host mail.yourdomain.com --user root --password "your_password" --action update
+
+# Check remote service health, ports, and RAM
+python deployer.py --host mail.yourdomain.com --user root --password "your_password" --action status
+
+# View recent service logs
+python deployer.py --host mail.yourdomain.com --user root --password "your_password" --action logs
+```
+
+---
+
+## 📄 License & Legal Notice
 
 Lightmail is distributed under the [MIT License](LICENSE).  
-Original PMail implementation Copyright © Jinnrry. Enhancements and Lightmail refactoring Copyright © Ashu Choudhury.
+Original PMail implementation Copyright © Jinnrry.  
+Enhancements, Svelte webmail, Cloudflare automation, SQLite migration, and Lightmail distribution Copyright © Ashu Choudhury.
