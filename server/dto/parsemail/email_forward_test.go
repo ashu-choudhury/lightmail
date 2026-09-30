@@ -12,15 +12,12 @@ import (
 )
 
 func TestForwardBuildBytesRemailsFromLocalUser(t *testing.T) {
-	oldConfig := config.Instance
-	oldDkim := instance
-	defer func() {
-		config.Instance = oldConfig
-		instance = oldDkim
-	}()
+	oldConfig := config.Get()
+	defer config.Set(oldConfig)
 
-	config.Instance = &config.Config{Domain: "example.com", Domains: []string{"example.com"}}
-	instance = nil
+	// example.com 没有DKIM私钥，转发邮件应保持未签名而不是签名失败
+	config.Set(&config.Config{Domain: "example.com"})
+	Reload()
 
 	email := &Email{
 		From:    &User{Name: "Original Sender", EmailAddress: "sender@example.com"},

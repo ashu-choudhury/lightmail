@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	seedIMAPTestData()
-	crt, err := tls.LoadX509KeyPair(config.Instance.SSLPublicKeyPath, config.Instance.SSLPrivateKeyPath)
+	crt, err := tls.LoadX509KeyPair(config.Get().SSLPublicKeyPath, config.Get().SSLPrivateKeyPath)
 	if err != nil {
 		panic(err)
 	}

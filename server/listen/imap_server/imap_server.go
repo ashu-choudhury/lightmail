@@ -28,7 +28,7 @@ func StarTLS() {
 }
 
 func newIMAPServer() *imapserver.Server {
-	crt, err := tls.LoadX509KeyPair(config.Instance.SSLPublicKeyPath, config.Instance.SSLPrivateKeyPath)
+	crt, err := tls.LoadX509KeyPair(config.Get().SSLPublicKeyPath, config.Get().SSLPrivateKeyPath)
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +50,7 @@ func newIMAPServer() *imapserver.Server {
 		InsecureAuth: false,
 	}
 
-	if config.Instance.LogLevel == "debug" {
+	if config.Get().LogLevel == "debug" {
 		option.DebugWriter = os.Stdout
 	}
 

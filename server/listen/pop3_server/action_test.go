@@ -9,13 +9,16 @@ import (
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/emersion/go-message/mail"
 	"io"
+	"path/filepath"
 	"testing"
 )
 
 func Test_action_Retr(t *testing.T) {
 	config.Init()
-	config.Instance.DbType = config.DBTypeSQLite
-	config.Instance.DbDSN = config.ROOT_PATH + "./config/pmail_temp.db"
+	cfg := config.Get().Clone()
+	cfg.DbType = config.DBTypeSQLite
+	cfg.DbDSN = filepath.Join(config.ROOT_PATH, "config", "pmail_temp.db")
+	config.Set(cfg)
 	db.Init("")
 
 	a := action{}

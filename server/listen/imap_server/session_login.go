@@ -4,24 +4,23 @@ import (
 	"database/sql"
 	"github.com/Jinnrry/pmail/db"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/utils/errors"
 	"github.com/Jinnrry/pmail/utils/password"
 	"github.com/emersion/go-imap/v2"
 	log "github.com/sirupsen/logrus"
-	"strings"
 )
 
 func (s *serverSession) Login(username, pwd string) error {
-	if strings.Contains(username, "@") {
-		args := strings.Split(username, "@")
-		username = args[0]
-	}
-
 	var user models.User
 
 	encodePwd := password.Encode(pwd)
 
-	_, err := db.Instance.Where("account =? and password =? and disabled = 0", username, encodePwd).Get(&user)
+	// 账号归属域名：登录名可以是完整邮箱地址，也可以是主域名下的裸用户名
+	accountFilter, accountArgs := account.LoginPredicate(username)
+	accountArgs = append(accountArgs, encodePwd)
+
+	_, err := db.Instance.Where(accountFilter+" and password =? and disabled = 0", accountArgs...).Get(&user)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.WithContext(s.ctx).Errorf("%+v", err)
 	}

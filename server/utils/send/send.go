@@ -8,6 +8,7 @@ import (
 	"github.com/Jinnrry/pmail/config"
 	"github.com/Jinnrry/pmail/dto/parsemail"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/utils/array"
 	"github.com/Jinnrry/pmail/utils/async"
 	"github.com/Jinnrry/pmail/utils/consts"
@@ -53,15 +54,28 @@ func Forward(ctx *context.Context, e *parsemail.Email, forwardAddress string, us
 
 	log.WithContext(ctx).Debugf("%s", b)
 
-	from := user.Account + "@" + config.Instance.Domains[0]
-	return forwardData(ctx, config.Instance.Domains[0], b, forwardAddress, from)
+	from := forwardFrom(user)
+	return forwardData(ctx, account.DomainPart(from), b, forwardAddress, from)
 }
 
 func ForwardRaw(ctx *context.Context, e *parsemail.Email, rawEmailData []byte, forwardAddress string, user *models.User) error {
 	log.WithContext(ctx).Debugf("开始原始邮件转发")
 
-	from := user.Account + "@" + config.Instance.Domains[0]
-	return forwardData(ctx, config.Instance.Domains[0], rawEmailData, forwardAddress, from)
+	from := forwardFrom(user)
+	return forwardData(ctx, account.DomainPart(from), rawEmailData, forwardAddress, from)
+}
+
+// forwardFrom returns the full address a forwarded message is sent from. The
+// mailbox already carries its own domain; older rows without one fall back to
+// the primary domain.
+func forwardFrom(user *models.User) string {
+	if user == nil {
+		return ""
+	}
+	if address := account.Normalize(user.Account); account.DomainPart(address) != "" {
+		return address
+	}
+	return user.Account + "@" + config.Get().PrimaryDomain()
 }
 
 func forwardData(ctx *context.Context, fromDomain string, data []byte, forwardAddress string, from string) error {

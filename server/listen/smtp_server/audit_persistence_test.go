@@ -446,14 +446,14 @@ func newAuditTestEngine(t *testing.T) (*xorm.Engine, string) {
 	}
 
 	oldDB := db.Instance
-	oldConfig := config.Instance
+	oldConfig := config.Get()
 	oldHooks := hooks.HookList
 	db.Instance = engine
-	config.Instance = &config.Config{DbType: config.DBTypeSQLite, Domain: "example.com", Domains: []string{"example.com"}}
+	config.Set(&config.Config{DbType: config.DBTypeSQLite, Domain: "example.com"})
 	hooks.HookList = nil
 	t.Cleanup(func() {
 		db.Instance = oldDB
-		config.Instance = oldConfig
+		config.Set(oldConfig)
 		hooks.HookList = oldHooks
 		_ = engine.Close()
 	})

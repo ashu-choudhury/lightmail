@@ -18,8 +18,8 @@ import (
 	"github.com/Jinnrry/pmail/hooks/framework"
 	"github.com/Jinnrry/pmail/listen/imap_server"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/auth"
 	"github.com/Jinnrry/pmail/services/rule"
-	"github.com/Jinnrry/pmail/utils/array"
 	"github.com/Jinnrry/pmail/utils/async"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/send"
@@ -73,8 +73,8 @@ func (s *Session) Data(r io.Reader) error {
 
 	// 判断是收信还是转发，只要是登陆了，都当成转发处理
 	if s.Ctx.UserID > 0 {
-		account, _ := email.From.GetDomainAccount()
-		if account != ctx.UserAccount && !ctx.IsAdmin {
+		// 账号归属域名：只允许以自己的邮箱身份发信，管理员可为任意已配置域名发信
+		if !auth.CanSendAs(ctx, email.From.EmailAddress) {
 			return oerrors.New("No Auth")
 		}
 
@@ -103,7 +103,7 @@ func (s *Session) Data(r io.Reader) error {
 		SPFStatus = spfCheck(s.RemoteAddress.String(), email.Sender, email.Sender.EmailAddress)
 
 		_, formDomain := email.From.GetDomainAccount()
-		spoofed := array.InArray(formDomain, config.Instance.Domains) && SPFStatus == false
+		spoofed := config.Get().HasDomain(formDomain) && SPFStatus == false
 		if spoofed {
 			dkimStatus = false
 		}
@@ -190,7 +190,7 @@ func saveEmail(ctx *context.Context, size int, email *parsemail.Email, sendUserI
 
 	msgID := email.MsgID
 	if msgID == "" {
-		msgID = parsemail.GenerateMsgID(config.Instance.Domain)
+		msgID = parsemail.GenerateMsgID(config.Get().PrimaryDomain())
 	}
 	if email.Size == 0 {
 		email.Size = size

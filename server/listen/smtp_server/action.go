@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/Jinnrry/pmail/db"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/id"
 	"github.com/Jinnrry/pmail/utils/password"
@@ -12,7 +13,6 @@ import (
 	"github.com/emersion/go-smtp"
 	log "github.com/sirupsen/logrus"
 	"net"
-	"strings"
 )
 
 // The Backend implements SMTP server methods.
@@ -73,12 +73,11 @@ func (s *Session) AuthPlain(username, pwd string) error {
 
 	encodePwd := password.Encode(pwd)
 
-	infos := strings.Split(username, "@")
-	if len(infos) > 1 {
-		username = infos[0]
-	}
+	// 账号归属域名：用户名可以是完整邮箱地址，也可以是主域名下的裸用户名
+	accountFilter, accountArgs := account.LoginPredicate(username)
+	accountArgs = append(accountArgs, encodePwd)
 
-	_, err := db.Instance.Where("account =? and password =? and disabled=0", username, encodePwd).Get(&user)
+	_, err := db.Instance.Where(accountFilter+" and password =? and disabled=0", accountArgs...).Get(&user)
 	if err != nil && err != sql.ErrNoRows {
 		log.Errorf("%+v", err)
 	}

@@ -14,7 +14,6 @@ import (
 	"github.com/Jinnrry/pmail/hooks"
 	"github.com/Jinnrry/pmail/hooks/framework"
 	"github.com/Jinnrry/pmail/models"
-	"github.com/Jinnrry/pmail/utils/array"
 	"github.com/Jinnrry/pmail/utils/async"
 	"github.com/Jinnrry/pmail/utils/context"
 	smtp "github.com/emersion/go-smtp"
@@ -158,9 +157,9 @@ func resolveIncomingUsers(ctx *context.Context, email *parsemail.Email, emailTyp
 	}
 
 	if DropUnknownRecipientEmails &&
-		((config.Instance.SpamFilterLevel == 1 && !SPFStatus && !dkimStatus) ||
-			(config.Instance.SpamFilterLevel == 2 && !SPFStatus) ||
-			(config.Instance.SpamFilterLevel == 3 && !dkimStatus)) {
+		((config.Get().SpamFilterLevel == 1 && !SPFStatus && !dkimStatus) ||
+			(config.Get().SpamFilterLevel == 2 && !SPFStatus) ||
+			(config.Get().SpamFilterLevel == 3 && !dkimStatus)) {
 		log.WithContext(ctx).Infoln("垃圾邮件，拒信")
 		log.WithContext(ctx).Infof("收件人不存在且DKIM验证失败，丢弃邮件: %s -> %v", email.From.EmailAddress, accounts)
 		return nil, true, nil
@@ -177,29 +176,57 @@ func resolveIncomingUsers(ctx *context.Context, email *parsemail.Email, emailTyp
 }
 
 func incomingAccounts(email *parsemail.Email, reallyTo []string) []string {
-	var accounts []string
 	if len(reallyTo) > 0 {
+		recipients := make([]*parsemail.User, 0, len(reallyTo))
 		for _, recipient := range reallyTo {
-			account := parsemail.BuilderUser(recipient)
-			if account == nil {
-				continue
-			}
-			name, domain := account.GetDomainAccount()
-			if array.InArray(domain, config.Instance.Domains) && name != "" {
-				accounts = append(accounts, strings.ToLower(name))
+			if user := parsemail.BuilderUser(recipient); user != nil {
+				recipients = append(recipients, user)
 			}
 		}
-		return accounts
+		return mailboxAddresses(recipients)
 	}
-	for _, recipients := range [][]*parsemail.User{email.To, email.Cc, email.Bcc} {
-		for _, user := range recipients {
-			account, _ := user.GetDomainAccount()
-			if account != "" {
-				accounts = append(accounts, strings.ToLower(account))
-			}
+
+	var recipients []*parsemail.User
+	for _, list := range [][]*parsemail.User{email.To, email.Cc, email.Bcc} {
+		recipients = append(recipients, list...)
+	}
+	return mailboxAddresses(recipients)
+}
+
+// mailboxAddresses maps recipients onto the stored account values that may hold
+// them. Every served domain yields the full local@domain address; the primary
+// domain additionally yields the bare local part so mailboxes created before
+// accounts were domain-scoped keep receiving their mail.
+func mailboxAddresses(recipients []*parsemail.User) []string {
+	cfg := config.Get()
+	primary := strings.ToLower(cfg.PrimaryDomain())
+
+	var addresses []string
+	seen := make(map[string]struct{}, len(recipients))
+	add := func(address string) {
+		if address == "" {
+			return
+		}
+		if _, ok := seen[address]; ok {
+			return
+		}
+		seen[address] = struct{}{}
+		addresses = append(addresses, address)
+	}
+
+	for _, recipient := range recipients {
+		local, domain := recipient.GetDomainAccount()
+		local = strings.ToLower(local)
+		domain = strings.ToLower(domain)
+		if local == "" || !cfg.HasDomain(domain) {
+			continue
+		}
+		add(local + "@" + domain)
+		if domain == primary {
+			add(local)
 		}
 	}
-	return accounts
+	return addresses
 }
 
 func boolInt8(value bool) int8 {

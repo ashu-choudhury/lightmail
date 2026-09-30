@@ -58,20 +58,19 @@ func TestReceiveHooksAndDatabaseShareAuthenticationResult(t *testing.T) {
 	engine := newAuthenticationTestEngine(t)
 
 	oldDB := db.Instance
-	oldConfig := config.Instance
+	oldConfig := config.Get()
 	oldHooks := hooks.HookList
 	t.Cleanup(func() {
 		db.Instance = oldDB
-		config.Instance = oldConfig
+		config.Set(oldConfig)
 		hooks.HookList = oldHooks
 	})
 
 	db.Instance = engine
-	config.Instance = &config.Config{
+	config.Set(&config.Config{
 		Domain:          "test.domain",
-		Domains:         []string{"test.domain"},
 		SpamFilterLevel: 0,
-	}
+	})
 	recipient := &models.User{Account: "recipient", Name: "收件人"}
 	if _, err := engine.Insert(recipient); err != nil {
 		t.Fatalf("创建测试收件人失败：%v", err)

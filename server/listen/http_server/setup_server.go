@@ -41,7 +41,7 @@ func SetupStart() {
 		HttpPort = 80
 	}
 
-	config.Instance.SetSetupPort(HttpPort)
+	config.SetSetupPort(HttpPort)
 	log.Infof("HttpServer Start On Port :%d", HttpPort)
 	if HttpPort == 80 {
 		log.Infof("Please click http://%s to continue.\n", ip.GetIp())

@@ -19,7 +19,7 @@ func StartWithTLSNew() {
 	instanceTlsNew = smtp.NewServer(be)
 
 	instanceTlsNew.Addr = ":587"
-	instanceTlsNew.Domain = config.Instance.Domain
+	instanceTlsNew.Domain = config.Get().PrimaryDomain()
 	instanceTlsNew.ReadTimeout = 10 * time.Second
 	instanceTlsNew.WriteTimeout = 10 * time.Second
 	instanceTlsNew.MaxMessageBytes = 1024 * 1024 * 30
@@ -27,7 +27,7 @@ func StartWithTLSNew() {
 	// force TLS for auth
 	instanceTlsNew.AllowInsecureAuth = true
 	// Load the certificate and key
-	cer, err := tls.LoadX509KeyPair(config.Instance.SSLPublicKeyPath, config.Instance.SSLPrivateKeyPath)
+	cer, err := tls.LoadX509KeyPair(config.Get().SSLPublicKeyPath, config.Get().SSLPrivateKeyPath)
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -48,7 +48,7 @@ func StartWithTLS() {
 	instanceTls = smtp.NewServer(be)
 
 	instanceTls.Addr = ":465"
-	instanceTls.Domain = config.Instance.Domain
+	instanceTls.Domain = config.Get().PrimaryDomain()
 	instanceTls.ReadTimeout = 10 * time.Second
 	instanceTls.WriteTimeout = 10 * time.Second
 	instanceTls.MaxMessageBytes = 1024 * 1024 * 30
@@ -56,7 +56,7 @@ func StartWithTLS() {
 	// force TLS for auth
 	instanceTls.AllowInsecureAuth = true
 	// Load the certificate and key
-	cer, err := tls.LoadX509KeyPair(config.Instance.SSLPublicKeyPath, config.Instance.SSLPrivateKeyPath)
+	cer, err := tls.LoadX509KeyPair(config.Get().SSLPublicKeyPath, config.Get().SSLPrivateKeyPath)
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -76,7 +76,7 @@ func Start() {
 	instance = smtp.NewServer(be)
 
 	instance.Addr = ":25"
-	instance.Domain = config.Instance.Domain
+	instance.Domain = config.Get().PrimaryDomain()
 	instance.ReadTimeout = 10 * time.Second
 	instance.WriteTimeout = 10 * time.Second
 	instance.MaxMessageBytes = 1024 * 1024 * 30
@@ -84,7 +84,7 @@ func Start() {
 	// force TLS for auth
 	instance.AllowInsecureAuth = false
 	// Load the certificate and key
-	cer, err := tls.LoadX509KeyPair(config.Instance.SSLPublicKeyPath, config.Instance.SSLPrivateKeyPath)
+	cer, err := tls.LoadX509KeyPair(config.Get().SSLPublicKeyPath, config.Get().SSLPrivateKeyPath)
 	if err != nil {
 		log.Fatal(err)
 		return

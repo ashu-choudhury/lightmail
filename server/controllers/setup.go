@@ -7,25 +7,14 @@ import (
 	"github.com/Jinnrry/pmail/services/setup"
 	"github.com/Jinnrry/pmail/services/setup/ssl"
 	"github.com/Jinnrry/pmail/utils/context"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cast"
 	"io"
 	"net/http"
 	"os"
-	"strings"
 )
 
 func AcmeChallenge(w http.ResponseWriter, r *http.Request) {
-	log.Infof("AcmeChallenge: %s", r.URL.Path)
-	instance := ssl.GetHttpChallengeInstance()
-	token := strings.ReplaceAll(r.URL.Path, "/.well-known/acme-challenge/", "")
-	auth, exist := instance.AuthInfo[token]
-	if exist {
-		w.Write([]byte(auth.KeyAuth))
-	} else {
-		log.Errorf("AcmeChallenge Error Token Infos:%+v", instance.AuthInfo)
-		http.NotFound(w, r)
-	}
+	http.NotFound(w, r)
 }
 
 type sslResponse struct {
@@ -130,16 +119,14 @@ func Setup(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 		sslType := ssl.GetSSL()
 		res := sslResponse{
 			Type: sslType,
-			Port: config.Instance.GetSetupPort(),
+			Port: config.GetSetupPort(),
 		}
 		response.NewSuccessResponse(res).FPrint(w)
 		return
 	}
 
 	if reqData["step"] == "ssl" && reqData["action"] == "getParams" {
-		dnsChallenge := ssl.GetDnsChallengeInstance()
-
-		response.NewSuccessResponse(dnsChallenge.GetDNSSettings(ctx)).FPrint(w)
+		response.NewSuccessResponse([]any{}).FPrint(w)
 		return
 	}
 

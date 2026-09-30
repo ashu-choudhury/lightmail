@@ -40,7 +40,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(config.Instance.DbDSN)
+	fmt.Println(config.Get().DbDSN)
 
 	fmt.Println("文件第一列是分类，0表示正常邮件，1表示垃圾邮件，2表示诈骗邮件")
 

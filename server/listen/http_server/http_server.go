@@ -1,6 +1,7 @@
 package http_server
 
 import (
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"github.com/Jinnrry/pmail/config"
@@ -8,8 +9,10 @@ import (
 	"github.com/Jinnrry/pmail/controllers/email"
 	"github.com/Jinnrry/pmail/session"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -20,6 +23,39 @@ func HttpStop() {
 	if httpServer != nil {
 		httpServer.Close()
 	}
+}
+
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func (w gzipResponseWriter) WriteHeader(status int) {
+	w.ResponseWriter.Header().Del("Content-Length")
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ext := strings.ToLower(r.URL.Path)
+		if strings.HasSuffix(ext, ".png") || strings.HasSuffix(ext, ".jpg") || strings.HasSuffix(ext, ".jpeg") || strings.HasSuffix(ext, ".gif") || strings.HasSuffix(ext, ".zip") || strings.HasSuffix(ext, ".gz") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		next.ServeHTTP(gzipResponseWriter{Writer: gz, ResponseWriter: w}, r)
+	})
 }
 
 func router(mux *http.ServeMux) {
@@ -54,6 +90,14 @@ func router(mux *http.ServeMux) {
 	mux.HandleFunc("/api/user/edit", contextIterceptor(controllers.EditUser))
 	mux.HandleFunc("/api/user/info", contextIterceptor(controllers.Info))
 	mux.HandleFunc("/api/user/list", contextIterceptor(controllers.UserList))
+	mux.HandleFunc("/api/domain/list", contextIterceptor(controllers.DomainList))
+	mux.HandleFunc("/api/domain/add", contextIterceptor(controllers.DomainAdd))
+	mux.HandleFunc("/api/domain/del", contextIterceptor(controllers.DomainDelete))
+	mux.HandleFunc("/api/domain/dkim", contextIterceptor(controllers.DomainDkim))
+	mux.HandleFunc("/api/domain/check", contextIterceptor(controllers.DomainCheck))
+	mux.HandleFunc("/api/domain/cloudflare", contextIterceptor(controllers.DomainCloudflare))
+	mux.HandleFunc("/api/settings/cloudflare/get", contextIterceptor(controllers.CloudflareGetSettings))
+	mux.HandleFunc("/api/settings/cloudflare/save", contextIterceptor(controllers.CloudflareSaveSettings))
 	mux.HandleFunc("/api/plugin/settings/", contextIterceptor(controllers.SettingsHtml))
 	mux.HandleFunc("/api/plugin/list", contextIterceptor(controllers.GetPluginList))
 }
@@ -62,18 +106,18 @@ func HttpStart() {
 	mux := http.NewServeMux()
 
 	HttpPort := 80
-	if config.Instance.HttpPort > 0 {
-		HttpPort = config.Instance.HttpPort
+	if config.Get().HttpPort > 0 {
+		HttpPort = config.Get().HttpPort
 	}
 
-	if config.Instance.HttpsEnabled != 2 {
+	if config.Get().HttpsEnabled != 2 {
 		// 在重定向模式下，也必须显式处理 ACME 挑战，避免跳转导致验证失败
 		mux.HandleFunc("/.well-known/", controllers.AcmeChallenge)
 		mux.HandleFunc("/api/ping", controllers.Ping)
 		mux.HandleFunc("/", controllers.Interceptor)
 		httpServer = &http.Server{
 			Addr:         fmt.Sprintf(":%d", HttpPort),
-			Handler:      mux,
+			Handler:      gzipMiddleware(mux),
 			ReadTimeout:  time.Second * 90,
 			WriteTimeout: time.Second * 90,
 		}
@@ -81,10 +125,38 @@ func HttpStart() {
 
 		router(mux)
 
+		fe, err := fs.Sub(local, "dist")
+		if err != nil {
+			panic(err)
+		}
+		fileServer := http.FileServer(http.FS(fe))
+
+		sessionHandler := session.Instance.LoadAndSave(mux)
+
+		mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := r.URL.Path
+			if strings.HasPrefix(p, "/assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+			if p == "/" || p == "/index.html" {
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+			if p == "/vite.svg" || p == "/favicon.ico" {
+				w.Header().Set("Cache-Control", "public, max-age=86400")
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+			sessionHandler.ServeHTTP(w, r)
+		})
+
 		log.Infof("HttpServer Start On Port :%d", HttpPort)
 		httpServer = &http.Server{
 			Addr:         fmt.Sprintf(":%d", HttpPort),
-			Handler:      session.Instance.LoadAndSave(mux),
+			Handler:      gzipMiddleware(mainHandler),
 			ReadTimeout:  time.Second * 90,
 			WriteTimeout: time.Second * 90,
 		}

@@ -10,6 +10,7 @@ import (
 	"github.com/Jinnrry/pmail/dto"
 	"github.com/Jinnrry/pmail/dto/parsemail"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/services/rule/match"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/send"
@@ -83,7 +84,7 @@ func DoRule(ctx *context.Context, rule *dto.Rule, email *parsemail.Email, user *
 		if err != nil {
 			log.WithContext(ctx).Errorf("Forward Error:%v", err)
 		} else {
-			log.WithContext(ctx).Infof("Forward Success:%s@%s -> %s", user.Account, config.Instance.Domains[0], rule.Params)
+			log.WithContext(ctx).Infof("Forward Success:%s -> %s", user.Account, rule.Params)
 		}
 	case dto.MOVE:
 		doMove(ctx, rule, email, user)
@@ -97,16 +98,17 @@ func doForward(ctx *context.Context, email *parsemail.Email, forwardAddress stri
 		return fmt.Errorf("invalid forward address: %s", forwardAddress)
 	}
 
-	account, domain := forwardUser.GetDomainAccount()
-	if account == "" || domain == "" {
+	forwardLocal, domain := forwardUser.GetDomainAccount()
+	if forwardLocal == "" || domain == "" {
 		return fmt.Errorf("invalid forward address: %s", forwardAddress)
 	}
 
 	if isLocalDomain(domain) {
-		if strings.EqualFold(account, user.Account) {
+		// 账号归属域名：用完整地址比较，避免 bob@a.com 与 bob@b.com 被当成同一个人
+		if strings.EqualFold(forwardUser.EmailAddress, account.Normalize(user.Account)) {
 			return fmt.Errorf("loop forwarding to self: %s", forwardAddress)
 		}
-		return forwardToLocalUser(ctx, email, account, forwardAddress)
+		return forwardToLocalUser(ctx, email, forwardUser.EmailAddress)
 	}
 
 	if len(rawEmailData) > 0 {
@@ -119,14 +121,15 @@ func doForward(ctx *context.Context, email *parsemail.Email, forwardAddress stri
 	return send.Forward(ctx, email, forwardAddress, user)
 }
 
-func forwardToLocalUser(ctx *context.Context, email *parsemail.Email, account, forwardAddress string) error {
+func forwardToLocalUser(ctx *context.Context, email *parsemail.Email, forwardAddress string) error {
 	if email.MessageId <= 0 {
 		return fmt.Errorf("email has not been saved before local forwarding")
 	}
 
+	accountFilter, accountArgs := account.LoginPredicate(forwardAddress)
 	var user models.User
 	has, err := db.Instance.Table(&models.User{}).
-		Where("LOWER(account)=LOWER(?) and disabled=0", account).
+		Where(accountFilter+" and disabled=0", accountArgs...).
 		Get(&user)
 	if err != nil {
 		return err
@@ -155,12 +158,7 @@ func forwardToLocalUser(ctx *context.Context, email *parsemail.Email, account, f
 }
 
 func isLocalDomain(domain string) bool {
-	for _, localDomain := range config.Instance.Domains {
-		if strings.EqualFold(domain, localDomain) {
-			return true
-		}
-	}
-	return strings.EqualFold(domain, config.Instance.Domain)
+	return config.Get().HasDomain(domain)
 }
 
 func doMove(ctx *context.Context, rule *dto.Rule, email *parsemail.Email, user *models.User) {

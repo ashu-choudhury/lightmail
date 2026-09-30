@@ -31,6 +31,9 @@
       <el-tab-pane v-if="userInfos.is_admin" :label="lang.user_management">
         <UserManagement/>
       </el-tab-pane>
+      <el-tab-pane v-if="userInfos.is_admin" :label="lang.domain_management">
+        <DomainManagement/>
+      </el-tab-pane>
       <el-tab-pane :label="lang.plugin_settings">
         <PluginSettings/>
       </el-tab-pane>
@@ -46,6 +49,7 @@ import lang from '../i18n/i18n';
 import GroupSettings from './GroupSettings.vue';
 import RuleSettings from './RuleSettings.vue';
 import UserManagement from './UserManagement.vue';
+import DomainManagement from './DomainManagement.vue';
 import PluginSettings from './PluginSettings.vue';
 import {useGlobalStatusStore} from "@/stores/useGlobalStatusStore";
 

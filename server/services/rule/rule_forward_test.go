@@ -14,17 +14,14 @@ import (
 )
 
 func TestForwardToLocalUser(t *testing.T) {
-	oldConfig := config.Instance
+	oldConfig := config.Get()
 	oldDB := db.Instance
 	defer func() {
-		config.Instance = oldConfig
+		config.Set(oldConfig)
 		db.Instance = oldDB
 	}()
 
-	config.Instance = &config.Config{
-		Domain:  "example.com",
-		Domains: []string{"example.com"},
-	}
+	config.Set(&config.Config{Domain: "example.com"})
 
 	engine, err := xorm.NewEngine("sqlite", ":memory:")
 	if err != nil {
@@ -70,13 +67,10 @@ func TestForwardToLocalUser(t *testing.T) {
 }
 
 func TestForwardToLocalUserRejectsSelfLoop(t *testing.T) {
-	oldConfig := config.Instance
-	defer func() { config.Instance = oldConfig }()
+	oldConfig := config.Get()
+	defer config.Set(oldConfig)
 
-	config.Instance = &config.Config{
-		Domain:  "example.com",
-		Domains: []string{"example.com"},
-	}
+	config.Set(&config.Config{Domain: "example.com"})
 
 	err := doForward(&context.Context{}, &parsemail.Email{MessageId: 1}, "sender@example.com", &models.User{Account: "sender"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "loop forwarding to self") {

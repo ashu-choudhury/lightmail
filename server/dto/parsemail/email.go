@@ -460,7 +460,11 @@ func (e *Email) ForwardBuildBytes(ctx *context.Context, sender *models.User, for
 	forwardUser := buildUser(forwardAddress)
 	to := []*mail.Address{{forwardUser.Name, forwardUser.EmailAddress}}
 
-	senderEmailAddress := fmt.Sprintf("%s@%s", sender.Account, config.Instance.Domains[0])
+	senderEmailAddress := sender.Account
+	if !strings.Contains(senderEmailAddress, "@") {
+		// 旧版本创建的账号只有用户名，按主域名补全
+		senderEmailAddress = fmt.Sprintf("%s@%s", senderEmailAddress, config.Get().PrimaryDomain())
+	}
 	senderAddress := []*mail.Address{{sender.Name, senderEmailAddress}}
 	// Create our mail header
 	var h mail.Header
@@ -475,7 +479,7 @@ func (e *Email) ForwardBuildBytes(ctx *context.Context, sender *models.User, for
 	h.Set("X-Forwarded-By", senderEmailAddress)
 	h.Set("X-Forwarded-To", forwardUser.EmailAddress)
 	h.SetText("Subject", e.Subject)
-	h.SetMessageID(GenerateMsgID(config.Instance.Domain))
+	h.SetMessageID(GenerateMsgID(config.Get().PrimaryDomain()))
 	if e.MsgID != "" {
 		h.Set("References", fmt.Sprintf("<%s>", e.MsgID))
 		h.Set("In-Reply-To", fmt.Sprintf("<%s>", e.MsgID))
@@ -528,12 +532,8 @@ func (e *Email) ForwardBuildBytes(ctx *context.Context, sender *models.User, for
 
 	mw.Close()
 
-	if instance == nil {
-		return b.Bytes()
-	}
-
-	// dkim 签名后返回
-	return instance.Sign(b.String())
+	// dkim 签名后返回，用发件人自己的域名签名
+	return Sign(b.String(), &User{Name: sender.Name, EmailAddress: senderEmailAddress})
 }
 
 func (e *Email) BuildPart(ctx *context.Context, loc []int) []byte {
@@ -631,7 +631,7 @@ func (e *Email) BuildBytes(ctx *context.Context, dkim bool) []byte {
 	if e.MsgID != "" {
 		h.SetMessageID(e.MsgID)
 	} else {
-		h.SetMessageID(fmt.Sprintf("%d@%s", e.MessageId, config.Instance.Domain))
+		h.SetMessageID(fmt.Sprintf("%d@%s", e.MessageId, config.Get().PrimaryDomain()))
 	}
 	h.SetAddressList("From", from)
 	h.SetAddressList("Sender", from)
@@ -710,8 +710,8 @@ func (e *Email) BuildBytes(ctx *context.Context, dkim bool) []byte {
 	mw.Close()
 
 	if dkim {
-		// dkim 签名后返回
-		return instance.Sign(b.String())
+		// dkim 签名后返回，用发件人自己的域名签名
+		return Sign(b.String(), e.From)
 	}
 	return b.Bytes()
 }

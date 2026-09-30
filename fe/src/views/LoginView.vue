@@ -15,7 +15,7 @@
             <el-form-item :label="lang.account">
               <el-input 
                 v-model="form.account" 
-                :placeholder="lang.account"
+                :placeholder="lang.account_login_ph"
                 size="large"
                 class="premium-input"
               />

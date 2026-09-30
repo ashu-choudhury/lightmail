@@ -161,19 +161,23 @@ const ruleForm = reactive({
 })
 const fileList = reactive([]);
 
+// 账号归属域名：发件人由“邮箱用户名 + 所属域名”组成，
+// 默认选中当前账号自己的域名
+const applyUserInfos = function () {
+  const infos = globalStatus.userInfos || {}
+  const address = infos.account || ""
+  const at = address.indexOf("@")
+  ruleForm.sender = at === -1 ? address : address.slice(0, at)
+  ruleForm.domains = infos.domains || []
+  ruleForm.pickDomain = infos.domain || (at === -1 ? "" : address.slice(at + 1)) || ruleForm.domains[0] || ""
+  ruleForm.nickName = infos.name
+}
+
 const init = function () {
     if ( Object.keys(globalStatus.userInfos)==0 || globalStatus.userInfos === null || globalStatus.userInfos == undefined ){
-      globalStatus.init(()=>{
-        ruleForm.sender = globalStatus.userInfos.account
-        ruleForm.domains = globalStatus.userInfos.domains
-        ruleForm.pickDomain = globalStatus.userInfos.domains[0]
-        ruleForm.nickName = globalStatus.userInfos.name
-      })
+      globalStatus.init(applyUserInfos)
     }else{
-      ruleForm.sender = globalStatus.userInfos.account
-      ruleForm.domains = globalStatus.userInfos.domains
-      ruleForm.pickDomain = globalStatus.userInfos.domains[0]
-      ruleForm.nickName = globalStatus.userInfos.name
+      applyUserInfos()
     }
 }
 init()

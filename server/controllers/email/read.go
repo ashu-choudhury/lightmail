@@ -2,8 +2,9 @@ package email
 
 import (
 	"encoding/json"
+	"github.com/Jinnrry/pmail/db"
 	"github.com/Jinnrry/pmail/dto/response"
-	"github.com/Jinnrry/pmail/services/detail"
+	"github.com/Jinnrry/pmail/models"
 	"github.com/Jinnrry/pmail/utils/context"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -11,7 +12,8 @@ import (
 )
 
 type markReadRequest struct {
-	IDs []int `json:"ids"`
+	IDs    []int `json:"ids"`
+	IsRead *bool `json:"isRead"`
 }
 
 func MarkRead(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
@@ -26,18 +28,30 @@ func MarkRead(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 	}
 
 	if len(reqData.IDs) <= 0 {
-		response.NewErrorResponse(response.ParamsError, "ID错误", "").FPrint(w)
+		response.NewErrorResponse(response.ParamsError, "IDs required", "").FPrint(w)
 		return
+	}
+
+	targetReadStatus := int8(1)
+	if reqData.IsRead != nil && !*reqData.IsRead {
+		targetReadStatus = int8(0)
 	}
 
 	for _, id := range reqData.IDs {
-		detail.GetEmailDetail(ctx, id, true)
+		var ue models.UserEmail
+		has, err := db.Instance.Where("email_id = ? AND user_id = ?", id, ctx.UserID).Get(&ue)
+		if err != nil {
+			log.WithContext(ctx).Errorf("SQL error: %+v", err)
+			continue
+		}
+		if has {
+			ue.IsRead = targetReadStatus
+			_, err = db.Instance.Where("id = ?", ue.ID).Cols("is_read").Update(&ue)
+			if err != nil {
+				log.WithContext(ctx).Errorf("SQL error updating is_read: %+v", err)
+			}
+		}
 	}
 
-	if err != nil {
-		response.NewErrorResponse(response.ServerError, err.Error(), "").FPrint(w)
-		return
-	}
 	response.NewSuccessResponse("success").FPrint(w)
-
 }

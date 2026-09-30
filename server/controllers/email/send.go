@@ -12,7 +12,8 @@ import (
 	"github.com/Jinnrry/pmail/hooks/framework"
 	"github.com/Jinnrry/pmail/i18n"
 	"github.com/Jinnrry/pmail/models"
-	"github.com/Jinnrry/pmail/utils/array"
+	"github.com/Jinnrry/pmail/services/account"
+	"github.com/Jinnrry/pmail/services/auth"
 	"github.com/Jinnrry/pmail/utils/async"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/send"
@@ -66,12 +67,13 @@ func Send(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 	}
 
 	if reqData.From.Email != "" {
-		infos := strings.Split(reqData.From.Email, "@")
-		if len(infos) != 2 || !array.InArray(infos[1], config.Instance.Domains) {
+		local, domain := account.Split(reqData.From.Email)
+		if local == "" || domain == "" || !config.Get().HasDomain(domain) {
 			response.NewErrorResponse(response.ParamsError, "params error", "").FPrint(w)
 			return
 		}
-		if !ctx.IsAdmin && infos[0] != ctx.UserAccount {
+		// 账号归属域名：只允许以自己的邮箱身份发信，管理员可为任意已配置域名发信
+		if !auth.CanSendAs(ctx, reqData.From.Email) {
 			response.NewErrorResponse(response.ParamsError, "params error", "").FPrint(w)
 			return
 		}
@@ -79,7 +81,7 @@ func Send(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 	}
 
 	if reqData.From.Email == "" {
-		reqData.From.Email = ctx.UserAccount + "@" + config.Instance.Domain
+		reqData.From.Email = ctx.UserAccount
 	}
 
 	if reqData.From.Email == "" {
@@ -191,7 +193,7 @@ func Send(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 		CronSendTime: time.Now(),
 		Status:       1,
 		CreateTime:   time.Now(),
-		MsgID:        parsemail.GenerateMsgID(config.Instance.Domain),
+		MsgID:        parsemail.GenerateMsgID(config.Get().PrimaryDomain()),
 	}
 
 	_, err = db.Instance.Insert(&modelEmail)

@@ -2,11 +2,12 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/Jinnrry/pmail/config"
 	"github.com/Jinnrry/pmail/db"
 	"github.com/Jinnrry/pmail/dto/response"
 	"github.com/Jinnrry/pmail/models"
-	"github.com/Jinnrry/pmail/utils/array"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/password"
 	log "github.com/sirupsen/logrus"
@@ -14,14 +15,18 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 )
 
 type userCreateRequest struct {
 	Id       int    `json:"id"`
 	Account  string `json:"account"`
+	Domain   string `json:"domain"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Disabled int    `json:"disabled"`
+	IsAdmin  int    `json:"is_admin"`
+	Gender   string `json:"gender"`
 }
 
 func CreateUser(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
@@ -46,10 +51,28 @@ func CreateUser(ctx *context.Context, w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
+	address, err := resolveNewAddress(reqData.Account, reqData.Domain)
+	if err != nil {
+		response.NewErrorResponse(response.ParamsError, err.Error(), err.Error()).FPrint(w)
+		return
+	}
+
+	exists, err := db.Instance.Table(&models.User{}).Where("LOWER(account)=?", address).Exist()
+	if err != nil {
+		response.NewErrorResponse(response.ServerError, err.Error(), "").FPrint(w)
+		return
+	}
+	if exists {
+		response.NewErrorResponse(response.ParamsError, "Account already exists", "Account already exists").FPrint(w)
+		return
+	}
+
 	var user models.User
 	user.Name = reqData.Username
 	user.Password = password.Encode(reqData.Password)
-	user.Account = reqData.Account
+	user.Account = address
+	user.IsAdmin = reqData.IsAdmin
+	user.Gender = reqData.Gender
 
 	_, err = db.Instance.Insert(&user)
 	if err != nil {
@@ -58,6 +81,27 @@ func CreateUser(ctx *context.Context, w http.ResponseWriter, req *http.Request) 
 	}
 
 	response.NewSuccessResponse(user).FPrint(w)
+}
+
+// resolveNewAddress builds the mailbox address for a new account. account may be
+// a full address or a bare local part; a bare one is completed with domain,
+// which defaults to the primary domain.
+func resolveNewAddress(accountName, domain string) (string, error) {
+	local, embedded := account.Split(accountName)
+	if embedded != "" {
+		domain = embedded
+	}
+	if domain == "" {
+		domain = config.Get().PrimaryDomain()
+	}
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if !config.Get().HasDomain(domain) {
+		return "", fmt.Errorf("%s is not a domain this server hosts", domain)
+	}
+	if err := account.ValidateLocal(local); err != nil {
+		return "", err
+	}
+	return account.Build(local, domain), nil
 }
 
 type userListRequest struct {
@@ -107,12 +151,12 @@ func UserList(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 
 func Info(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 
-	domains := config.Instance.Domains
-	domains = array.Difference(domains, []string{config.Instance.Domain})
-	domains = append([]string{config.Instance.Domain}, domains...)
+	// DomainNames 保证主域名排在最前面
+	domains := config.Get().DomainNames()
 
 	response.NewSuccessResponse(map[string]any{
 		"account":  ctx.UserAccount,
+		"domain":   account.DomainPart(ctx.UserAccount),
 		"name":     ctx.UserName,
 		"is_admin": ctx.IsAdmin,
 		"domains":  domains,
@@ -147,7 +191,8 @@ func EditUser(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 			log.Errorf("SQL Error: %+v", err)
 		}
 	} else {
-		_, err = db.Instance.Where("account=?", reqData.Account).Get(&user)
+		accountFilter, accountArgs := account.LoginPredicate(reqData.Account)
+		_, err = db.Instance.Where(accountFilter, accountArgs...).Get(&user)
 		if err != nil {
 			log.Errorf("SQL Error: %+v", err)
 		}
@@ -163,11 +208,17 @@ func EditUser(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 	if reqData.Disabled != user.Disabled {
 		user.Disabled = reqData.Disabled
 	}
+	if reqData.IsAdmin != user.IsAdmin {
+		user.IsAdmin = reqData.IsAdmin
+	}
+	if reqData.Gender != "" && reqData.Gender != user.Gender {
+		user.Gender = reqData.Gender
+	}
 	if reqData.Password != "" {
 		user.Password = password.Encode(reqData.Password)
 	}
 
-	num, err := db.Instance.ID(user.ID).Cols("name", "password", "disabled").Update(&user)
+	num, err := db.Instance.ID(user.ID).Cols("name", "password", "disabled", "is_admin", "gender").Update(&user)
 
 	if err != nil {
 		response.NewErrorResponse(response.ServerError, err.Error(), "").FPrint(w)

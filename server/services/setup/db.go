@@ -4,6 +4,7 @@ import (
 	"github.com/Jinnrry/pmail/config"
 	"github.com/Jinnrry/pmail/db"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/utils/array"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/errors"
@@ -38,10 +39,12 @@ func GetAdminPassword(ctx *context.Context) (string, error) {
 	return "", nil
 }
 
-func SetAdminPassword(ctx *context.Context, account, pwd string) error {
+func SetAdminPassword(ctx *context.Context, accountName, pwd string) error {
 	encodePwd := password.Encode(pwd)
+	// 账号归属域名：初始化阶段可能还没配置域名，届时保留原始用户名，
+	// 启动时会由 MigrateUserAccounts 补全主域名
 	var user models.User = models.User{
-		Account:  account,
+		Account:  account.Normalize(accountName),
 		Name:     "admin",
 		Password: encodePwd,
 		IsAdmin:  1,

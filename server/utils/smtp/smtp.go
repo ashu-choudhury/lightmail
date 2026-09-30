@@ -103,8 +103,8 @@ func NewClient(conn net.Conn, host, fromDomain string) (*Client, error) {
 
 	if fromDomain != "" {
 		localName = fromDomain
-	} else if config.Instance != nil && config.Instance.Domain != "" {
-		localName = config.Instance.Domain
+	} else if primary := config.Get().PrimaryDomain(); primary != "" {
+		localName = primary
 	}
 
 	c := &Client{Text: text, conn: conn, serverName: host, localName: localName}

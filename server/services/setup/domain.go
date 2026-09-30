@@ -1,10 +1,11 @@
 package setup
 
 import (
+	"strings"
+
 	"github.com/Jinnrry/pmail/config"
 	"github.com/Jinnrry/pmail/utils/array"
 	"github.com/Jinnrry/pmail/utils/errors"
-	"strings"
 )
 
 func GetDomainSettings() (string, string, []string, error) {
@@ -13,7 +14,7 @@ func GetDomainSettings() (string, string, []string, error) {
 		return "", "", []string{}, errors.Wrap(err)
 	}
 
-	return configData.Domain, configData.WebDomain, array.Difference(configData.Domains, []string{configData.Domain}), nil
+	return configData.Domain, configData.WebDomain, array.Difference(configData.DomainNames(), []string{configData.Domain}), nil
 }
 
 func SetDomainSettings(smtpDomain, webDomain, multiDomains string) error {
@@ -30,19 +31,18 @@ func SetDomainSettings(smtpDomain, webDomain, multiDomains string) error {
 		return errors.New("web domain must not empty!")
 	}
 
-	configData.Domains = []string{}
-
-	if multiDomains != "" {
-		domains := strings.Split(multiDomains, ",")
-		configData.Domains = domains
+	var domains []config.Domain
+	for _, name := range strings.Split(multiDomains, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			domains = append(domains, config.NewDomain(name))
+		}
 	}
+	// 主域名必须排在第一位
+	domains = append(domains, config.NewDomain(smtpDomain))
 
-	if !array.InArray(smtpDomain, configData.Domains) {
-		configData.Domains = append(configData.Domains, smtpDomain)
-	}
-
-	configData.Domain = smtpDomain
+	configData.Domain = strings.ToLower(strings.TrimSpace(smtpDomain))
 	configData.WebDomain = webDomain
+	configData.Domains = domains
 
 	// 检查域名是否指向本机 todo
 

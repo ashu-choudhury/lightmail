@@ -66,7 +66,7 @@ func Init(serverVersion string) {
 		// imap server start
 		go imap_server.StarTLS()
 
-		configStr, _ := json.Marshal(config.Instance)
+		configStr, _ := json.Marshal(config.Get())
 		log.Warnf("Config File Info:  %s", configStr)
 
 		select {
@@ -121,8 +121,8 @@ func dirInit() {
 // 新增：HTTP 就绪探测（最多等待 ~90 秒）
 func waitHTTPReady() {
 	port := 80
-	if config.Instance != nil && config.Instance.HttpPort > 0 {
-		port = config.Instance.HttpPort
+	if cfg := config.Get(); cfg.HttpPort > 0 {
+		port = cfg.HttpPort
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/api/ping", port)
 

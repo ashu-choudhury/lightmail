@@ -11,6 +11,7 @@ import (
 	"github.com/Jinnrry/pmail/dto/response"
 	"github.com/Jinnrry/pmail/i18n"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/session"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/id"
@@ -46,11 +47,11 @@ func HttpsStart() {
 	nullLog := olog.New(&nullWrite{}, "", olog.Ldate)
 
 	HttpsPort := 443
-	if config.Instance.HttpsPort > 0 {
-		HttpsPort = config.Instance.HttpsPort
+	if config.Get().HttpsPort > 0 {
+		HttpsPort = config.Get().HttpsPort
 	}
 
-	if config.Instance.HttpsEnabled != 2 {
+	if config.Get().HttpsEnabled != 2 {
 		log.Infof("Https Server Start On Port :%d", HttpsPort)
 		httpsServer = &http.Server{
 			Addr:         fmt.Sprintf(":%d", HttpsPort),
@@ -59,7 +60,7 @@ func HttpsStart() {
 			WriteTimeout: time.Second * 90,
 			ErrorLog:     nullLog,
 		}
-		err := httpsServer.ListenAndServeTLS(config.Instance.SSLPublicKeyPath, config.Instance.SSLPrivateKeyPath)
+		err := httpsServer.ListenAndServeTLS(config.Get().SSLPublicKeyPath, config.Get().SSLPrivateKeyPath)
 		if err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
 				// 正常关闭（重启或停机）
@@ -150,14 +151,16 @@ func getLoginInfoByToken(token string) (models.User, error) {
 	if len(data) != 3 {
 		return ret, errors.New("token format error")
 	}
-	account := data[0]
+	tokenAccount := data[0]
 	encodePwd := data[1]
 	requestTimeStamp := cast.ToInt64(data[2])
 	if time.Now().Unix()-requestTimeStamp >= 5 {
 		return ret, errors.New("token expired")
 	}
 	var user models.User
-	db.Instance.Table("user").Where("account =? and disabled=0", account).Get(&user)
+	// 账号归属域名：token 中的账号名既可以是完整邮箱地址，也可以是主域名下的裸用户名
+	accountFilter, accountArgs := account.LoginPredicate(tokenAccount)
+	db.Instance.Table("user").Where(accountFilter+" and disabled=0", accountArgs...).Get(&user)
 	if user.ID == 0 {
 		return ret, errors.New("account or password error")
 	}

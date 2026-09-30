@@ -8,50 +8,38 @@ import (
 	"github.com/Jinnrry/pmail/models"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/errors"
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
+	_ "modernc.org/sqlite"
 	"xorm.io/xorm"
 )
 
 var Instance *xorm.Engine
 
 func Init(version string) error {
-	dsn := config.Instance.DbDSN
+	dsn := config.Get().DbDSN
 	var err error
-	if config.Instance.DbType == config.DBTypeSQLite {
-		dsn, err = sqliteDSNWithReliabilityOptions(dsn)
-		if err != nil {
-			return errors.Wrap(err)
-		}
+	dsn, err = sqliteDSNWithReliabilityOptions(dsn)
+	if err != nil {
+		return errors.Wrap(err)
 	}
 
-	switch config.Instance.DbType {
-	case "mysql":
-		Instance, err = xorm.NewEngine("mysql", dsn)
-	case "sqlite":
-		Instance, err = xorm.NewEngine("sqlite", dsn)
-	case "postgres":
-		Instance, err = xorm.NewEngine("postgres", dsn)
-	default:
-		return errors.New("Database Type Error!")
-	}
+	Instance, err = xorm.NewEngine("sqlite", dsn)
 	if err != nil {
 		log.Errorf("DB init Error! %s", err.Error())
 		return errors.Wrap(err)
 	}
-	if config.Instance.DbType == config.DBTypeSQLite {
-		Instance.SetMaxOpenConns(1)
-		Instance.SetMaxIdleConns(1)
-	} else {
-		Instance.SetMaxOpenConns(100)
-		Instance.SetMaxIdleConns(10)
-	}
+	Instance.SetMaxOpenConns(1)
+	Instance.SetMaxIdleConns(1)
 
 	Instance.SetConnMaxLifetime(30 * time.Minute)
-	Instance.ShowSQL(config.Instance.LogLevel == "debug")
+	Instance.ShowSQL(config.Get().LogLevel == "debug")
 	// 同步表结构
 	syncTables()
+
+	// 更新历史数据：为旧版本创建的不带域名的账号补全主域名
+	if err := MigrateUserAccounts(); err != nil {
+		log.Errorf("Migrate user accounts failed: %v", err)
+	}
 
 	// 更新历史数据
 	fixHistoryData()
@@ -72,7 +60,7 @@ func Init(version string) error {
 		}
 	}
 
-	//if config.Instance.LogLevel == "debug" {
+	//if config.Get().LogLevel == "debug" {
 	//	Instance.ShowSQL(true)
 	//}
 
@@ -113,6 +101,10 @@ func syncTables() {
 		panic(err)
 	}
 	err = Instance.Sync2(&models.Version{})
+	if err != nil {
+		panic(err)
+	}
+	err = Instance.Sync2(&models.Setting{})
 	if err != nil {
 		panic(err)
 	}

@@ -93,7 +93,7 @@ func buildEnvelope(email *response.EmailResponseData, traEmail *parsemail.Email)
 	if email.MsgID != "" {
 		messageID = fmt.Sprintf("<%s>", email.MsgID)
 	} else {
-		messageID = fmt.Sprintf("<%d@%s>", email.Id, config.Instance.Domain)
+		messageID = fmt.Sprintf("<%d@%s>", email.Id, config.Get().Domain)
 	}
 
 	return &imap.Envelope{
@@ -329,7 +329,7 @@ func write(ctx *context.Context, w *imapserver.FetchWriter, emailList []*respons
 							fmt.Fprintf(&b, "Bcc: %s\r\n", traEmail.BuildBcc2String())
 						}
 					case "message-id":
-						fmt.Fprintf(&b, "Message-ID: <%d@%s>\r\n", email.Id, config.Instance.Domain)
+						fmt.Fprintf(&b, "Message-ID: <%d@%s>\r\n", email.Id, config.Get().Domain)
 					case "content-type":
 						args := strings.SplitN(string(emailContent), "\r\n", 3)
 						if len(args) >= 2 {

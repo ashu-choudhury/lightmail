@@ -8,8 +8,8 @@ import (
 	"github.com/Jinnrry/pmail/dto/response"
 	"github.com/Jinnrry/pmail/i18n"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/session"
-	"github.com/Jinnrry/pmail/utils/array"
 	"github.com/Jinnrry/pmail/utils/context"
 	"github.com/Jinnrry/pmail/utils/errors"
 	"github.com/Jinnrry/pmail/utils/password"
@@ -38,7 +38,11 @@ func Login(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 	var user models.User
 
 	encodePwd := password.Encode(reqData.Password)
-	_, err = db.Instance.Where("account =? and password =? and disabled=0", reqData.Account, encodePwd).Get(&user)
+
+	// 账号归属域名：登录名可以是完整邮箱地址，也可以是主域名下的裸用户名
+	accountFilter, accountArgs := account.LoginPredicate(reqData.Account)
+	accountArgs = append(accountArgs, encodePwd)
+	_, err = db.Instance.Where(accountFilter+" and password =? and disabled=0", accountArgs...).Get(&user)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.Errorf("%+v", err)
 	}
@@ -47,12 +51,12 @@ func Login(ctx *context.Context, w http.ResponseWriter, req *http.Request) {
 		userStr, _ := json.Marshal(user)
 		session.Instance.Put(req.Context(), "user", string(userStr))
 
-		domains := config.Instance.Domains
-		domains = array.Difference(domains, []string{config.Instance.Domain})
-		domains = append([]string{config.Instance.Domain}, domains...)
+		// DomainNames 保证主域名排在最前面
+		domains := config.Get().DomainNames()
 
 		response.NewSuccessResponse(map[string]any{
 			"account":  user.Account,
+			"domain":   account.DomainPart(user.Account),
 			"name":     user.Name,
 			"is_admin": user.IsAdmin,
 			"domains":  domains,

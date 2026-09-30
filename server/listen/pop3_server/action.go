@@ -9,6 +9,7 @@ import (
 	"github.com/Jinnrry/pmail/dto"
 	"github.com/Jinnrry/pmail/dto/parsemail"
 	"github.com/Jinnrry/pmail/models"
+	"github.com/Jinnrry/pmail/services/account"
 	"github.com/Jinnrry/pmail/services/del_email"
 	"github.com/Jinnrry/pmail/services/detail"
 	"github.com/Jinnrry/pmail/services/list"
@@ -83,14 +84,10 @@ func (a action) User(session *gopop.Session, username string) error {
 	}
 	log.WithContext(session.Ctx).Debugf("POP3 CMD: USER, Args:%s", username)
 
-	infos := strings.Split(username, "@")
-	if len(infos) > 1 {
-		username = infos[0]
-	}
+	// 账号归属域名：用户名可以是完整邮箱地址，也可以是主域名下的裸用户名
+	session.User = account.Normalize(username)
 
-	log.WithContext(session.Ctx).Debugf("POP3 User %s", username)
-
-	session.User = username
+	log.WithContext(session.Ctx).Debugf("POP3 User %s", session.User)
 	return nil
 }
 
@@ -108,7 +105,10 @@ func (a action) Pass(session *gopop.Session, pwd string) error {
 
 	encodePwd := password.Encode(pwd)
 
-	_, err := db.Instance.Where("account =? and password =? and disabled = 0", session.User, encodePwd).Get(&user)
+	accountFilter, accountArgs := account.LoginPredicate(session.User)
+	accountArgs = append(accountArgs, encodePwd)
+
+	_, err := db.Instance.Where(accountFilter+" and password =? and disabled = 0", accountArgs...).Get(&user)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.WithContext(session.Ctx.(*context.Context)).Errorf("%+v", err)
 	}
@@ -135,16 +135,14 @@ func (a action) Apop(session *gopop.Session, username, digest string) error {
 	}
 	log.WithContext(session.Ctx).Debugf("POP3 CMD: APOP, Args:%s,%s", username, digest)
 
-	infos := strings.Split(username, "@")
-	if len(infos) > 1 {
-		username = infos[0]
-	}
+	username = account.Normalize(username)
 
 	log.WithContext(session.Ctx).Debugf("POP3 APOP %s %s", username, digest)
 
 	var user models.User
 
-	_, err := db.Instance.Where("account =? and disabled = 0", username).Get(&user)
+	accountFilter, accountArgs := account.LoginPredicate(username)
+	_, err := db.Instance.Where(accountFilter+" and disabled = 0", accountArgs...).Get(&user)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.WithContext(session.Ctx.(*context.Context)).Errorf("%+v", err)
 	}

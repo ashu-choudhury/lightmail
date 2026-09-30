@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -38,9 +39,10 @@ func testInit() {
 	time.Local = cst
 
 	config.Init()
-	config.Instance.DkimPrivateKeyPath = config.ROOT_PATH + "./config/dkim/dkim.priv"
-	config.Instance.DbType = config.DBTypeSQLite
-	config.Instance.DbDSN = config.ROOT_PATH + "./config/pmail_temp.db"
+	cfg := config.Get().Clone()
+	cfg.DbType = config.DBTypeSQLite
+	cfg.DbDSN = filepath.Join(config.ROOT_PATH, "config", "pmail_temp.db")
+	config.Set(cfg)
 
 	parsemail2.Init()
 	db.Init("")
