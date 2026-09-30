@@ -162,11 +162,30 @@ export const apiSendEmail = (body) =>
   });
 
 // User Management (Admin)
-export const apiGetUserList = (page = 1, pageSize = 20) =>
-  request('/api/user/list', {
+export const normalizeUserItem = (item) => {
+  if (!item) return {};
+  return {
+    ...item,
+    id: item.id !== undefined ? item.id : item.ID,
+    account: item.account || item.Account || '',
+    name: item.name || item.Name || '',
+    is_admin: item.is_admin !== undefined ? item.is_admin : (item.IsAdmin !== undefined ? item.IsAdmin : 0),
+    disabled: item.disabled !== undefined ? item.disabled : (item.Disabled !== undefined ? item.Disabled : 0),
+    gender: item.gender !== undefined ? item.gender : (item.Gender || ''),
+  };
+};
+
+export const apiGetUserList = async (page = 1, pageSize = 20) => {
+  const data = await request('/api/user/list', {
     method: 'POST',
     body: JSON.stringify({ currentPage: page, pageSize }),
   });
+  const list = (data.list || []).map(normalizeUserItem);
+  return {
+    ...data,
+    list,
+  };
+};
 
 export const apiCreateUser = ({ account, domain, username, password, isAdmin = 0, gender = '' }) =>
   request('/api/user/create', {
