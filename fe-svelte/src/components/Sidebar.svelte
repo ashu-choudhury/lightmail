@@ -84,7 +84,7 @@
       <span class="label">Spam</span>
     </button>
 
-    {#if $currentUser?.is_admin}
+    {#if $currentUser?.is_admin || $currentUser?.IsAdmin}
       <div class="section-divider">ADMINISTRATION</div>
 
       <button

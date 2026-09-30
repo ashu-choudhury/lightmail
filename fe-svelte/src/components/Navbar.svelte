@@ -103,7 +103,7 @@
             <div class="user-details">
               <strong>{$currentUser?.name || 'User'}</strong>
               <small>{$currentUser?.account}</small>
-              {#if $currentUser?.is_admin}
+              {#if $currentUser?.is_admin || $currentUser?.IsAdmin}
                 <span class="badge-admin">Administrator</span>
               {/if}
             </div>
@@ -113,7 +113,7 @@
             <Icon name="settings" size={16} />
             <span>Account Settings</span>
           </button>
-          {#if $currentUser?.is_admin}
+          {#if $currentUser?.is_admin || $currentUser?.IsAdmin}
             <button class="dropdown-item" on:click={() => { $currentFolder = 'admin-users'; userMenuOpen = false; }}>
               <Icon name="users" size={16} />
               <span>User Management</span>

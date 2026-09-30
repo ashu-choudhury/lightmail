@@ -19,7 +19,11 @@
     if ($currentUser) {
       try {
         const info = await apiGetUserInfo();
-        $currentUser = { ...$currentUser, ...info };
+        $currentUser = {
+          ...$currentUser,
+          ...info,
+          is_admin: info.is_admin === true || info.is_admin === 1 || info.IsAdmin === 1 || $currentUser.is_admin === true || $currentUser.is_admin === 1,
+        };
       } catch (e) {
         // session expired
         $currentUser = null;
